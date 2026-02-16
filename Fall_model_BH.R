@@ -209,7 +209,7 @@ edt_fall$Model_Equilibrium_Spawners <-
 
 
 # Optional: write to CSV
-write.csv(edt_fall, "fall_chinook_model_results.csv", row.names = FALSE)
+#write.csv(edt_fall, "fall_chinook_model_results.csv", row.names = FALSE)
 
 
 
@@ -520,6 +520,6 @@ plot_subbasin <- function(subpop_name) {
 }
 
 # Example
-plot_subbasin(subpops[1])
-
+plot_subbasin(subpops[34]) ##Above Crim Cr
+plot_subbasin(subpops[23]) ##RBF to Crim Cr
 plots <- lapply(subpops, plot_subbasin)
