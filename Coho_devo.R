@@ -139,10 +139,11 @@ simulate_coho <- function(
 
 #---- test with edt values 
 
+Eggs.p.spawner <- 1500
 
 
 sim_coho <- simulate_coho(
-  nyears = 50,
+  nyears = 100,
   
   p_spawn_parr  = 3.5,      # EDT DD productivity
   c_spawn_parr  = 8000,     # EDT DD capacity
@@ -151,7 +152,7 @@ sim_coho <- simulate_coho(
   c_parr_smolt  = 5000,     # EDT DD capacity
   
   SAR = 0.03,               # EDT DI Total returns to spawners
-  prespawn_surv = 0.85
+  prespawn_surv = 0.87505
 )
 
 plot(sim_coho$Year, sim_coho$Spawners, type="l",
