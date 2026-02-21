@@ -24,6 +24,8 @@
 
 edt <- read.csv("C:/Users/Blake.Hamilton/OneDrive - Kleinschmidt Associates/Projects/Chehalis/Pop ass model/EDT Outputs/Master EDT outputs.csv")
 
+#Need to source the source()
+edt <- combined_df
 
 # =========================
 # RECRUITMENT FUNCTION
@@ -69,7 +71,20 @@ make_A_marine_fall_chinook <- function(
 ) {
   
   # Back-calculate estuary/Grays Harbor survival
-  gh_surv <- SAR / prod(ocean_surv)
+  #gh_surv <- SAR / prod(ocean_surv)
+  #have to use maturity weighted
+  # maturity weighted survival
+  b2 <- b["b2"]; b3 <- b["b3"]; b4 <- b["b4"]; b5 <- b["b5"]
+  o1 <- ocean_surv[1]; o2 <- ocean_surv[2]; o3 <- ocean_surv[3]; o4 <- ocean_surv[4]
+  
+  W <- (o1 * b2) +
+    (o1 * (1 - b2) * o2 * b3) +
+    (o1 * (1 - b2) * o2 * (1 - b3) * o3 * b4) +
+    (o1 * (1 - b2) * o2 * (1 - b3) * o3 * (1 - b4) * o4 * b5)
+  
+  gh_surv <- SAR / W
+  
+  
   
   # Initialize empty matrix
   A <- matrix(0, nrow = 7, ncol = 7)

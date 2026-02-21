@@ -1,42 +1,14 @@
-#==================================
-# 
-# 
-#  LCM based on SEPA LCM utilizes EDT outputs:
-#  productivity
-#  capacity
-#  prespawner survival
-#  juvenile to spawner survival
-# 
-# 
+#===================================
 #
-#=================================
+#   Chinook model for SEPA
+#
+#
+#
+#
+#===================================
 
 
 
-#===  Functions  
-
-ipak <- function(pkg) {
-  new.pkg <- pkg[!(pkg %in% installed.packages()[, "Package"])]
-  if (length(new.pkg))
-    install.packages(new.pkg, dependencies = TRUE)
-  sapply(pkg, require, character.only = TRUE)
-}
-
-g <- function(x) head(x)
-
-
-
-# Fall Chinook matrix-type life cycle model (Figure 2 + Table 2)
-# - Nonlinear DD Beverton-Holt for Spawners -> Smolts
-# - DI (linear) survival through Grays Harbor + ocean years
-# - Age-specific maturation b2-b5 producing spawning adults
-# Source: Beechie & Hendrix 2025 SEPA EDT-LCM report (Table 2, Figure 2)
-#  adults that do not mature at b5 are killed
-
-beverton_holt <- function(N, p, c) {
-  # N_{t+1} = (p*N) / (1 + (p/c)*N)
-  (p * N) / (1 + (p / c) * N)
-}
 
 # Build a linear transition matrix for the DI (marine) part.
 # State vector order:
@@ -49,6 +21,8 @@ beverton_holt <- function(N, p, c) {
 #   7 O5  (ocean year 5 fish; potential age-5 returns)
 #
 # NOTE: Recruitment (Spawners -> Smolts) is nonlinear DD, so we keep that outside A.
+
+#do no vary marine survival or maturity rates
 make_A_marine_fall_chinook <- function(
     SAR,                   # total smolt-to-adult return from EDT (DI)
     prespawn_surv,          # pre-spawn survival p (DI)
@@ -105,7 +79,8 @@ make_A_marine_fall_chinook <- function(
   A
 }
 
-
+#need to loop through prod and cap values as determined by draw
+# 2 yr flood -> 1-p10-p100
 
 step_fall_chinook <- function(
     state,
@@ -132,7 +107,7 @@ step_fall_chinook <- function(
 }
 
 
-
+#===== base sim function ===================
 simulate_fall_chinook <- function(
     nyears,
     init = c(Spawners = 500, Smolts = 0, O1 = 0, O2 = 0, O3 = 0, O4 = 0, O5 = 0),
@@ -155,13 +130,13 @@ simulate_fall_chinook <- function(
   out <- matrix(NA_real_, nrow = nyears + 1, ncol = 7)
   colnames(out) <- names(init)
   out[1, ] <- init
-  
   state <- init
+  
   for (t in 1:nyears) {
     state <- step_fall_chinook(
       state = state,
-      p_spawn_smolt = p_spawn_smolt,
-      c_spawn_smolt = c_spawn_smolt,
+      p_spawn_smolt = p_spawn_smolt[t],
+      c_spawn_smolt = c_spawn_smolt[t],
       A_marine = A
     )
     out[t + 1, ] <- state
@@ -170,27 +145,68 @@ simulate_fall_chinook <- function(
   as.data.frame(out) |>
     transform(Year = 0:nyears, .before = 1)
 }
+#=============================================================
+
+
+# loop sim function
+simulate_fall_chinook_tv_const_ocean <- function(
+    nyears,
+    init = c(Spawners=500, Smolts=0, O1=0, O2=0, O3=0, O4=0, O5=0),
+    params,  # data.frame with columns: p_spawn_smolt, c_spawn_smolt, prespawn_surv, Juv_spawn_surv
+    
+    ocean_surv = c(0.6, 0.7, 0.8, 0.9, 0.9),  # constant
+    b = c(b2 = 0.007, b3 = 0.07, b4 = 0.35, b5 = 0.85) # constant
+) {
+  stopifnot(nrow(params) >= nyears)
+  
+  out <- matrix(NA_real_, nrow = nyears + 1, ncol = length(init))
+  colnames(out) <- names(init)
+  out[1,] <- init
+  state <- init
+  
+  for (t in 1:nyears) {
+    
+    # 1) year-specific freshwater DD recruitment
+    smolts_next <- beverton_holt(
+      state["Spawners"],
+      p = params$p_spawn_smolt[t],
+      c = params$c_spawn_smolt[t]
+    )
+    
+    # 2) year-specific SAR (pre-ocean) / prespawn; ocean survivals fixed
+    prespawn_t <- params$prespawn_surv[t]
+    SAR_t <- params$Juv_spawn_surv[t] / prespawn_t
+    
+    A_t <- make_A_marine_fall_chinook(
+      SAR = SAR_t,
+      prespawn_surv = prespawn_t,
+      ocean_surv = ocean_surv,
+      b = b
+    )
+    
+    # 3) advance marine states
+    state_for_A <- state
+    state_for_A["Smolts"] <- smolts_next
+    next_state <- as.numeric(A_t %*% state_for_A)
+    names(next_state) <- rownames(A_t)
+    
+    # 4) keep smolts for reporting
+    next_state["Smolts"] <- smolts_next
+    
+    state <- next_state
+    out[t+1,] <- state
+  }
+  
+  as.data.frame(out) |>
+    transform(Year = 0:nyears, .before = 1)
+}
+
+#=================== end loop sim function ======================
+
 
 # ---- Example run (you MUST replace these EDT-derived placeholders) ----
 # p_spawn_smolt and c_spawn_smolt should come from EDT for the scenario/flood type you want.
 # SAR is EDT "Total returns to Spawners" DI ratio (Table 2 descriptor), and prespawn_surv is EDT p.
-
-#equilibirum/juvenile to adult abundance
-
-#equilibrium abundance is column S
-#juvenile to adult abundance is column AA
-#SAR is equilibirum/juvenile to adult
-
-# Using your provided row values
-p_spawn_smolt <- 163.5      # Juvenile Productivity
-c_spawn_smolt <- 5344       # Juvenile Capacity
-
-prespawn_surv <- 0.832856728
-Juv_spawn_surv <- 0.0270716299275952
-# Make SAR consistent with Juvenile-to-Spawner survival = 0.027
-# so that SAR * prespawn_surv ≈ 0.027
-SAR <- Juv_spawn_surv / prespawn_surv  # ≈ 0.03242
-
 
 #pull values from dataframe
 #p_spawn_smolt -> # Juvenile Productivity
@@ -222,98 +238,138 @@ dat <- dat %>% filter(Subpopulation %in% c('Above Crim SB'),
 
 #Make a flood scenario
 flood <- c('2yr', '10yr', '100yr')
-i = 2
-p_spawn_smolt <- dat %>%
-  filter(str_detect(Scenario, regex(flood[i], ignore_case = TRUE))) %>%
+
+# flood_prob_table <- tibble::tribble(
+#   ~period,                  ~typical, ~major, ~catastrophic,
+#   "recent",                    0.85,    0.14,     0.01,
+#   "ensemble_median_mid",       0.71,    0.27,     0.016,
+#   "ensemble_median_late",      0.63,    0.34,     0.027,
+#   "ensemble_max_mid",          0.58,    0.37,     0.05,
+#   "ensemble_max_late",         0.45,    0.47,     0.076
+# )
+
+#for sepa comps use '2yr', '10yr', '100yr'
+flood_prob_table <- tibble::tribble(
+  ~period,                  ~'2yr', ~'10yr', ~'100yr',
+  "recent",                    0.85,    0.14,     0.01,
+  "ensemble_median_mid",       0.71,    0.27,     0.016,
+  "ensemble_median_late",      0.63,    0.34,     0.027,
+  "ensemble_max_mid",          0.58,    0.37,     0.05,
+  "ensemble_max_late",         0.45,    0.47,     0.076
+)
+
+
+
+# quick check: rows sum to 1 (allowing tiny rounding error)
+#stopifnot(all(abs(rowSums(flood_prob_table[,c("typical","major","catastrophic")]) - 1) < 1e-6))
+
+#note the recent or other here must change for future
+draw_flood_types <- function(nyears, period = "recent", prob_table = flood_prob_table, seed = NULL) {
+  if (!is.null(seed)) set.seed(seed)
+  
+  row <- prob_table[prob_table$period == period, ]
+  if (nrow(row) != 1) stop("period not found in prob_table: ", period)
+  
+  probs <- as.numeric(row[, c("2yr","10yr","100yr")])
+  types <- c("2yr","10yr","100yr")
+  
+  sample(types, size = nyears, replace = TRUE, prob = probs)
+}
+
+
+
+#------------------------------- loop me ---------------------------
+for(j in 1:500)
+{
+
+# Draw flood types:
+#set the time frame for the run here
+nyears = 30
+
+flood_seq <- draw_flood_types(nyears = nyears, period = "recent")
+table(flood_seq) / length(flood_seq)
+flood_seq
+
+p_spawn_smolt = rep(NA, nyears)
+c_spawn_smolt = rep(NA, nyears)
+prespawn_surv = rep(NA, nyears) 
+Juv_spawn_surv = rep(NA, nyears)
+
+for(i in 1:nyears)
+{
+p_spawn_smolt[i] <- dat %>%
+  filter(str_detect(Scenario, regex(flood_seq[i], ignore_case = TRUE))) %>%
   pull(`Juvenile Productivity`)     # Juvenile Productivity
 
-c_spawn_smolt <- dat %>%
-  filter(str_detect(Scenario, regex(flood[i], ignore_case = TRUE))) %>%
+c_spawn_smolt[i] <- dat %>%
+  filter(str_detect(Scenario, regex(flood_seq[i], ignore_case = TRUE))) %>%
   pull(`Juvenile Capacity`)          # Juvenile Capacity
 
 #check this
-prespawn_surv <- dat %>%
-  filter(str_detect(Scenario, regex(flood[i], ignore_case = TRUE))) %>%
-  pull(`Prespawner Survival`)    
+prespawn_surv[i] <- dat %>%
+  filter(str_detect(Scenario, regex(flood_seq[i], ignore_case = TRUE))) %>%
+  pull(`Prespawner Survival`)
 
-#must cals prespawn survial
-#EDT out:
-#spawner to spawer ->  productivty-> P = 4.5 column q column s in ours
-P <-4.32671843018236
-#juvi to adult productivity ->  p1 = 4.5 column Y
-p1 <- 5.38841084014346
+Juv_spawn_surv[i] <- dat %>%
+  filter(str_detect(Scenario, regex(flood_seq[i], ignore_case = TRUE))) %>%
+  pull(`Juvenile-to-Spawner Survival`)
 
-#p2 is pre-spawn survival 
-p2 <- P/p1
-p2
-prespawn_surv 
-<- p2
+}
 
+#set params here for function to step through; might be more efficient to have the function draw them
 
-
-Juv_spawn_surv <- dat %>%
-  filter(str_detect(Scenario, regex(flood[i], ignore_case = TRUE))) %>%
-  pull(`Juvenile-to-Spawner Survival`)   
-
+params <- data.frame(Year = 1:nyears, 
+                     p_spawn_smolt,
+                     c_spawn_smolt,
+                     prespawn_surv, 
+                     Juv_spawn_surv,
+                     o1=0.6, o2=0.7, o3=0.8, o4=0.9, o5=0.9,
+                     b2=0.007, b3=0.07, b4=0.35, b5=0.85)
 
 
 # Make SAR consistent with Juvenile-to-Spawner survival = 0.027
 # so that SAR * prespawn_surv ≈ 0.027
 SAR <- Juv_spawn_surv / prespawn_surv  # ≈ 0.03242
-SAR
-SAR <- 314/410
-SAR <- 0.0203891541004541
-SAR <- 0.0266460162513794
-
-i=3
 
 
-sim <- simulate_fall_chinook(
-  nyears = 100,
-  init = c(Spawners = 200, Smolts = 0, O1 = 0, O2 = 0, O3 = 0, O4 = 0, O5 = 0),
-  p_spawn_smolt = p_spawn_smolt,
-  c_spawn_smolt = c_spawn_smolt,
-  SAR = SAR,
-  prespawn_surv = prespawn_surv
+#need to capture each sim into aframe
+sim <- simulate_fall_chinook_tv_const_ocean(
+  nyears = nyears,
+  init = c(Spawners = 310, Smolts = 15000, O1 = 1300, O2 = 775, O3 = 505, O4 = 262, O5 = 35),
+  params = params
+  
 )
 
-tail(sim)
-plot(sim$Year, sim$Spawners, type="l", xlab="Year", ylab="Spawners")
+#capture the simulations
+sim$simrun = j
+if(j == 1){all_sims = sim}else{all_sims =  rbind(all_sims, sim)}
 
 
+#tail(sim)
+#plot the first run then do line
+if(j == 1){plot(sim$Year, sim$Spawners, type="l", xlab="Year", ylab="Spawners", ylim = c(300,325))}else{
+lines(sim$Year, sim$Spawners, col = 'azure4')}
 
-#our edt
+#add avg line
 
-# Using your provided row values
-p_spawn_smolt <- 223.1      # Juvenile Productivity
-c_spawn_smolt <- 4541       # Juvenile Capacity
+}
 
-#must cals prespawn survial
-#EDT out:
-#spawner to spawer ->  productivty-> P = 4.5 column q column s in ours
-P <-4.25161301642635
-#juvi to adult productivity ->  p1 = 4.5 column Y
-p1 <- 5.27369479553325
+#add avg line
 
-#p2 is pre-spawn survival 
-p2 <- P/p1
+mu_spawners <- all_sims %>%
+  group_by(Year) %>%
+  summarise(mu = mean(Spawners))
 
-prespawn_surv <- p2
-#prespawn_surv <- 0.832856728
-Juv_spawn_surv <- 0.0264235693250393
-# Make SAR consistent with Juvenile-to-Spawner survival = 0.027
-# so that SAR * prespawn_surv ≈ 0.027
-SAR <- Juv_spawn_surv / prespawn_surv  # ≈ 0.03242
+with(mu_spawners, lines(Year, mu, lwd = 2, col = 1))
 
-sim2 <- simulate_fall_chinook(
-  nyears = 80,
-  init = c(Spawners = 200, Smolts = 0, O1 = 0, O2 = 0, O3 = 0, O4 = 0, O5 = 0),
-  p_spawn_smolt = p_spawn_smolt,
-  c_spawn_smolt = c_spawn_smolt,
-  SAR = SAR,
-  prespawn_surv = prespawn_surv
-)
+#calc summary stats for year x
 
-tail(sim2)
-lines(sim2$Year, sim2$Spawners, col = 2)
+all_sims %>% filter(Year == 30) %>%
+  summarise(
+    min = min(Spawners),
+    mu = mean(Spawners),
+    max = max(Spawners)
+  )
+
+
 
