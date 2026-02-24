@@ -6,17 +6,22 @@
 # source of inputs into the LCM
 #
 # 2/12/26
-#
+# B Hamilton
 ##############################
 setwd("C:/Users/Blake.Hamilton/OneDrive - Kleinschmidt Associates/Projects/Chehalis/Pop ass model/EDT Outputs")
 
-install.packages(c("readxl", "dplyr", "stringr", "purrr"))
+
 library(readxl)
 library(dplyr)
 library(stringr)
 library(purrr)
 
+#For KS EDT
 data_dir <- "C:/Users/Blake.Hamilton/OneDrive - Kleinschmidt Associates/Projects/Chehalis/Pop ass model/EDT Outputs"
+
+#For SEPA EDT
+data_dir <- "C:/Users/Blake.Hamilton/OneDrive - Kleinschmidt Associates/Projects/Chehalis/Pop ass model/SEPA LCM/Chinook/data"
+
 
 #Path to files
 files <- list.files(
@@ -45,8 +50,8 @@ read_one <- function(f) {
   # --- add + reorder columns ---
   df %>%
     dplyr::mutate(
-      Species = species,
-      Scenario = scenario
+      Species = Species,               # these are uppercase in SEPA, lowercase in KS
+      Scenario = Scenario              #
     ) %>%
     dplyr::select(Species, Scenario, everything())
 }
@@ -56,6 +61,6 @@ combined_df <- map_dfr(files, read_one)
 #Save
 write.csv(
   combined_df,
-  file = file.path(data_dir, "Master EDT Outputs.csv"),
+  file = file.path(data_dir, "Master SEPA EDT Outputs.csv"),
   row.names = FALSE
 )
