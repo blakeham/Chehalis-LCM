@@ -1,13 +1,16 @@
 #===================================
 #
-#   Chinook model for SEPA
+#   FALL Chinook model for SEPA
 #
 #
 #
 #
 #===================================
 
-
+#Establish BH
+beverton_holt <- function(N, p, c) {
+  (p * N) / (1 + (p / c) * N)
+}
 
 
 # Build a linear transition matrix for the DI (marine) part.
@@ -341,7 +344,7 @@ SAR <- Juv_spawn_surv / prespawn_surv  # ≈ 0.03242
 #need to capture each sim into aframe
 sim <- simulate_fall_chinook_tv_const_ocean(
   nyears = nyears,
-  init = c(Spawners = 310, Smolts = 15000, O1 = 1300, O2 = 775, O3 = 505, O4 = 262, O5 = 35),
+  init = c(Spawners = 310, Smolts = 15000, O1 = 1300, O2 = 775, O3 = 505, O4 = 262, O5 = 35), 
   params = params
   
 )

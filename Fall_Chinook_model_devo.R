@@ -60,7 +60,18 @@ make_A_marine_fall_chinook <- function(
   
   # Per report QA/QC description: Grays Harbor survival partitioned from SAR by
   # dividing SAR by product of annual ocean survivals (page 24).
-  gh_surv <- SAR / prod(ocean_surv)
+  #maturity weighted survival
+  b2 <- b["b2"]; b3 <- b["b3"]; b4 <- b["b4"]; b5 <- b["b5"]
+  o1 <- ocean_surv[1]; o2 <- ocean_surv[2]; o3 <- ocean_surv[3]; o4 <- ocean_surv[4]
+  
+  W <- (o1 * b2) +
+    (o1 * (1 - b2) * o2 * b3) +
+    (o1 * (1 - b2) * o2 * (1 - b3) * o3 * b4) +
+    (o1 * (1 - b2) * o2 * (1 - b3) * o3 * (1 - b4) * o4 * b5)
+  
+  gh_surv <- SAR / W
+  
+  #gh_surv <- SAR / prod(ocean_surv)
   
   # 7x7 matrix for DI transitions (we will overwrite nonlinear parts each step)
   A <- matrix(0, nrow = 7, ncol = 7)
@@ -180,8 +191,85 @@ Juv_spawn_surv <- 0.0270716299275952
 # so that SAR * prespawn_surv ≈ 0.027
 SAR <- Juv_spawn_surv / prespawn_surv  # ≈ 0.03242
 
+
+#pull values from dataframe
+#p_spawn_smolt -> # Juvenile Productivity
+#c_spawn_smolt -> # Juvenile Capacity
+#prespawn_surv -> # Prespawner Survival
+#Juv_spawn_surv -> # Juvenile-to-Spawner Survival this column has a percent on it
+
+#to do draws could create vector of values that align with t draws
+# Using your provided row values
+##point to sepa for test run
+dat <- read_xlsx('C:/Users/Jason.Romine/OneDrive - Kleinschmidt Associates/Chehalis_LCM_devo/LCM Input and Results files/Chinook/data/All_Species_Median_Chinook.xlsx', 
+                 sheet = 'Values')
+#we only care about above crim and rbf to crim fall chinook and near for this
+# dat <- dat %>% filter(Subpopulation %in% c('Above Crim SB', 'Chehalis RBF to Crim SB'),
+#                       Species == 'Fall Chinook',
+#                       row_number() %in% grep("Near", Scenario, ignore.case = T),
+#                       row_number() %in% grep('NA', Scenario, ignore.case = T))
+
+
+#above crim near, No Action
+dat <- dat %>% filter(Subpopulation %in% c('Above Crim SB'),
+                      Species == 'Fall Chinook',
+                      row_number() %in% grep("Near", Scenario, ignore.case = T),
+                      row_number() %in% grep('NA', Scenario, ignore.case = T))
+
+#now we have 2, 10 and 100 yr flood
+#for near there really isn't much difference in values
+#lets just sim the near 2yr over time and ess what happens
+
+#Make a flood scenario
+flood <- c('2yr', '10yr', '100yr')
+i = 2
+p_spawn_smolt <- dat %>%
+  filter(str_detect(Scenario, regex(flood[i], ignore_case = TRUE))) %>%
+  pull(`Juvenile Productivity`)     # Juvenile Productivity
+
+c_spawn_smolt <- dat %>%
+  filter(str_detect(Scenario, regex(flood[i], ignore_case = TRUE))) %>%
+  pull(`Juvenile Capacity`)          # Juvenile Capacity
+
+#check this
+prespawn_surv <- dat %>%
+  filter(str_detect(Scenario, regex(flood[i], ignore_case = TRUE))) %>%
+  pull(`Prespawner Survival`)    
+
+#must cals prespawn survial
+#EDT out:
+#spawner to spawer ->  productivty-> P = 4.5 column q column s in ours
+P <-4.32671843018236
+#juvi to adult productivity ->  p1 = 4.5 column Y
+p1 <- 5.38841084014346
+
+#p2 is pre-spawn survival 
+p2 <- P/p1
+p2
+prespawn_surv 
+<- p2
+
+
+
+Juv_spawn_surv <- dat %>%
+  filter(str_detect(Scenario, regex(flood[i], ignore_case = TRUE))) %>%
+  pull(`Juvenile-to-Spawner Survival`)   
+
+
+
+# Make SAR consistent with Juvenile-to-Spawner survival = 0.027
+# so that SAR * prespawn_surv ≈ 0.027
+SAR <- Juv_spawn_surv / prespawn_surv  # ≈ 0.03242
+SAR
+SAR <- 314/410
+SAR <- 0.0203891541004541
+SAR <- 0.0266460162513794
+
+i=3
+
+
 sim <- simulate_fall_chinook(
-  nyears = 80,
+  nyears = 100,
   init = c(Spawners = 200, Smolts = 0, O1 = 0, O2 = 0, O3 = 0, O4 = 0, O5 = 0),
   p_spawn_smolt = p_spawn_smolt,
   c_spawn_smolt = c_spawn_smolt,
