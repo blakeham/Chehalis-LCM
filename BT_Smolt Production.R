@@ -12,9 +12,9 @@ library(ggplot2)
 #Want to only apply the flood-based, FRE ops mortalities to the proportion of the
 #population above Newaukum (minus S Fork Chehalis)
 #Entire pop based on ASRP TM2 = 29,358 ()
-#Newaukum + SF to Elk + Elk + Elk to Crim + Above Crim = 1,486 fish under current conditions
-#All other areas (S Fork + all downstream) = 27,872
-# SO, the area of focus is only 5.06% of all adults in system
+#SF to Elk(187) + Elk(19) + Elk to Crim(85) + Above Crim(113) = 404 fish under current conditions
+#All other areas (S Fork + all downstream) = 28,954
+# SO, the area of focus is only 1.40% of all adults in system
 pop_init <- 29358  #based on current pop estimates
 n_years  <- 70
 n_mc     <- 500
@@ -23,8 +23,9 @@ set.seed(123)
 # ------------------------------
 # 2. Life-History Parameters
 # ------------------------------
-prop_female       <- 0.5  #standard
-females_per_redd  <- 1    #standard
+#prop_female       <- 0.5  #standard
+#females_per_redd  <- 1    #standard
+adults_per_redd     <- 2.5
 eggs_per_redd     <- 5400 #NOAA LCM
 
 egg_to_fry        <- 0.40
@@ -68,24 +69,29 @@ draw_flood <- function(year){
 # ------------------------------
 
 #the 3.5% for major and 10.5% for catastrophic flood redd mortalities only apply
-#to the portion of the pop above Newaukum (minus S Fork Chehalis). That is only 5.06% 
-#of the total pop (1,486/29,358 * 100). So, 10.5% of 1,486 is 156.03, the assumed mortality
-#associated with a catastrophic flood. 156.03/29,358 = 0.0053, the assumed proportion of the
-#TOTAL Chehalis redds/adults that would be wiped out under a catastrphic flood and FRE ops
+#to the portion of the pop above Newaukum (minus S Fork Chehalis). That is only 1.40% 
+#of the total pop (404/29,358 * 100).
 
-#For major flood, 3.5% of 1,486 = 52.01. 52.01 / 29,358 = 0.0018; the proportion of total
-#Chehalis redds/adults wiped out 
+# 404 fish / 2.5 fish per redd = 161.6 redds in Upper Chehalis
+# 10.5% of these wiped out with catastrophic flood: 161.6 * 0.105 = 17 redds lost
+# 3.5% of these wiped out with catastrophic flood: 161.6 * 0.035 = 6 redds lost
+
+#Assume total Chehalis pop redds is 29,358 / 2.5 fish per redd = 11,743 redds
+#Upper Chehalis redd loss as proportion of entire basin: 
+            #Catastrophic flood: 17 redds lost / 11,743 total redds = 0.00144
+            #Major flood: 6 redds lost / 11,743 = 0.0005
+#Apply these proportions for the redd mort with FRE ops
 
 redd_mort_dam <- c(
   typical = 0.00,
-  major = 0.0018,
-  catastrophic = 0.0053
+  major = 0.0005,
+  catastrophic = 0.00144
 )
 
 redd_mort_no_action <- c(
   typical = 0.00,
   major = 0.000,
-  catastrophic = 0.0001
+  catastrophic = 0.000
 )
 
 # ------------------------------
@@ -101,8 +107,7 @@ run_lcm <- function(redd_mort_vector){
     
     for(yr in 1:n_years){
       
-      females <- adults * prop_female
-      redds   <- females / females_per_redd
+      redds   <- adults / adults_per_redd
       
       flood_type <- draw_flood(yr)
       redds_post <- redds * (1 - redd_mort_vector[flood_type])
@@ -137,7 +142,7 @@ percent_decline_by_year <-
 
 mean_percent_decline <- mean(percent_decline_by_year)
 
-cat("Mean Percent Decline in Smolts (Dam vs No Action):",
+cat("Mean Percent Decline in Smolts (FRE vs No Action):",
     round(mean_percent_decline,2), "%\n")
 
 # ------------------------------
@@ -153,13 +158,13 @@ difference_smolt <- overall_mean_no_action - overall_mean_dam
 percent_diff     <- difference_smolt / overall_mean_no_action * 100
 
 summary_table <- data.frame(
-  Scenario = c("No Action", "Dam Operations"),
+  Scenario = c("No Action", "FRE Operations"),
   Mean_Smolts = c(overall_mean_no_action,
                   overall_mean_dam)
 )
 
 comparison_row <- data.frame(
-  Scenario = "Difference (No Action - Dam)",
+  Scenario = "Difference (No Action - FRE)",
   Mean_Smolts = difference_smolt
 )
 
@@ -180,7 +185,7 @@ print(summary_output)
 # ------------------------------
 long_dam <- as.data.frame(as.table(results_dam))
 colnames(long_dam) <- c("Sim","Year","Smolts")
-long_dam$Scenario <- "Dam Operations"
+long_dam$Scenario <- "FRE Operations"
 
 long_no_action <- as.data.frame(as.table(results_no_action))
 colnames(long_no_action) <- c("Sim","Year","Smolts")
@@ -192,7 +197,7 @@ long_all$Year <- as.numeric(gsub("V","", long_all$Year))
 summary_df <- data.frame(
   Year = rep(1:n_years,2),
   Smolts = c(mean_dam, mean_no_action),
-  Scenario = rep(c("Dam Operations","No Action"),
+  Scenario = rep(c("FRE Operations","No Action"),
                  each=n_years)
 )
 
@@ -208,13 +213,13 @@ ggplot() +
             linewidth=1.4) +
   
   scale_color_manual(values=c(
-    "Dam Operations"="red",
+    "FRE Operations"="red",
     "No Action"="blue"
   )) +
   
   labs(title="Chinook Smolts Reaching Grays Harbor",
-       subtitle=paste("Decline with Dam:",
-                      round(mean_percent_decline,2),"%"),
+       subtitle=paste("Decline with FRE:",
+                      round(comparison_row$Mean_Smolts,2),"smolts"),
        x="Year",
        y="Smolts to Grays Harbor",
        color="Scenario") +
