@@ -1,6 +1,12 @@
 # ==========================================================
-# Chinook LCM: Adults → Smolts to Grays Harbor
-# Dam Operations vs No Action
+# Fall Chinook LCM: Adults → Smolts to Grays Harbor
+# FRE Operations vs No Action
+#
+#
+# This model was developed to be as simple as possible and provide
+# liberal estimates of mortality associated with FRE operations to 
+# quantify the total difference in smolts reaching Grays Harbor
+#
 # ==========================================================
 
 library(ggplot2)
@@ -10,12 +16,14 @@ library(ggplot2)
 # ------------------------------
 
 #Want to only apply the flood-based, FRE ops mortalities to the proportion of the
-#population above Newaukum (minus S Fork Chehalis)
-#Entire pop based on ASRP TM2 = 29,358 ()
-#SF to Elk(187) + Elk(19) + Elk to Crim(85) + Above Crim(113) = 404 fish under current conditions
+#population above Newaukum (minus S Fork Chehalis), which we are calling Upper Chehalis
+#Entire basin pop based on ASRP TM2 = 29,358 fish
+#Upper Chehalis Basin pop based on ASRP TM2: 
+          #SF to Elk(187) + Elk(19) + Elk to Crim(85) + Above Crim(113) = 404 fish under current conditions
 #All other areas (S Fork + all downstream) = 28,954
-# SO, the area of focus is only 1.40% of all adults in system
-pop_init <- 29358  #based on current pop estimates
+#So, the area of focus is only 1.40% of all adults in system
+
+pop_init <- 29358  
 n_years  <- 70
 n_mc     <- 500
 set.seed(123)
@@ -23,14 +31,12 @@ set.seed(123)
 # ------------------------------
 # 2. Life-History Parameters
 # ------------------------------
-#prop_female       <- 0.5  #standard
-#females_per_redd  <- 1    #standard
-adults_per_redd     <- 2.5
+adults_per_redd     <- 2.5 #????
 eggs_per_redd     <- 5400 #NOAA LCM
 
-egg_to_fry        <- 0.40
-fry_to_smolt_fw   <- 0.15
-estuary_surv      <- 0.70
+egg_to_fry        <- 0.40   # NEED TO JUSTIFY
+fry_to_smolt_fw   <- 0.15   # NEED TO JUSTIFY
+estuary_surv      <- 0.70   # NEED TO JUSTIFY
 
 egg_capacity      <- 8e6
 
@@ -217,7 +223,7 @@ ggplot() +
     "No Action"="blue"
   )) +
   
-  labs(title="Chinook Smolts Reaching Grays Harbor",
+  labs(title="Fall Chinook Smolts Reaching Grays Harbor",
        subtitle=paste("Decline with FRE:",
                       round(comparison_row$Mean_Smolts,2),"smolts"),
        x="Year",
