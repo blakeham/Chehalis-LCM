@@ -1,0 +1,222 @@
+# ==========================================================
+# Chinook LCM: Adults → Smolts to Grays Harbor
+# Dam Operations vs No Action
+# ==========================================================
+
+library(ggplot2)
+
+# ------------------------------
+# 1. Initial Conditions
+# ------------------------------
+
+#Want to only apply the flood-based, FRE ops mortalities to the proportion of the
+#population above Newaukum (minus S Fork Chehalis)
+#Entire pop based on ASRP TM2 = 29,358 ()
+#Newaukum + SF to Elk + Elk + Elk to Crim + Above Crim = 1,486 fish under current conditions
+#All other areas (S Fork + all downstream) = 27,872
+# SO, the area of focus is only 5.06% of all adults in system
+pop_init <- 29358  #based on current pop estimates
+n_years  <- 70
+n_mc     <- 500
+set.seed(123)
+
+# ------------------------------
+# 2. Life-History Parameters
+# ------------------------------
+prop_female       <- 0.5  #standard
+females_per_redd  <- 1    #standard
+eggs_per_redd     <- 5400 #NOAA LCM
+
+egg_to_fry        <- 0.40
+fry_to_smolt_fw   <- 0.15
+estuary_surv      <- 0.70
+
+egg_capacity      <- 8e6
+
+BH <- function(S, p, c){
+  (S * p) / (1 + (p / c) * S)
+}
+
+# ------------------------------
+# 3. Flood Probability Regime
+# ------------------------------
+
+#Use ensemble maximum values for most conservative estimate - higher mortality
+flood_probs <- data.frame(
+  period = c("Mid","Late"),
+  typical = c(0.58,0.45),
+  major = c(0.37,0.47),
+  catastrophic = c(0.05,0.076)
+)
+
+get_climate_period <- function(year){
+  if(year <= 35) return("Mid")
+  return("Late")
+}
+
+draw_flood <- function(year){
+  period <- get_climate_period(year)
+  probs <- flood_probs[flood_probs$period==period,
+                       c("typical","major","catastrophic")]
+  sample(c("typical","major","catastrophic"),
+         1,
+         prob=as.numeric(probs))
+}
+
+# ------------------------------
+# 4. Scenario-Specific Redd Mortalities
+# ------------------------------
+
+#the 3.5% for major and 10.5% for catastrophic flood redd mortalities only apply
+#to the portion of the pop above Newaukum (minus S Fork Chehalis). That is only 5.06% 
+#of the total pop (1,486/29,358 * 100). So, 10.5% of 1,486 is 156.03, the assumed mortality
+#associated with a catastrophic flood. 156.03/29,358 = 0.0053, the assumed proportion of the
+#TOTAL Chehalis redds/adults that would be wiped out under a catastrphic flood and FRE ops
+
+#For major flood, 3.5% of 1,486 = 52.01. 52.01 / 29,358 = 0.0018; the proportion of total
+#Chehalis redds/adults wiped out 
+
+redd_mort_dam <- c(
+  typical = 0.00,
+  major = 0.0018,
+  catastrophic = 0.0053
+)
+
+redd_mort_no_action <- c(
+  typical = 0.00,
+  major = 0.000,
+  catastrophic = 0.0001
+)
+
+# ------------------------------
+# 5. Simulation Function
+# ------------------------------
+run_lcm <- function(redd_mort_vector){
+  
+  smolts_out <- matrix(NA,n_mc,n_years)
+  
+  for(mc in 1:n_mc){
+    
+    adults <- pop_init
+    
+    for(yr in 1:n_years){
+      
+      females <- adults * prop_female
+      redds   <- females / females_per_redd
+      
+      flood_type <- draw_flood(yr)
+      redds_post <- redds * (1 - redd_mort_vector[flood_type])
+      
+      eggs <- BH(redds_post, eggs_per_redd, egg_capacity)
+      fry  <- eggs * egg_to_fry
+      smolts_fw <- fry * fry_to_smolt_fw
+      smolts_GH <- smolts_fw * estuary_surv
+      
+      smolts_out[mc,yr] <- smolts_GH
+      adults <- pop_init
+    }
+  }
+  
+  smolts_out
+}
+
+# ------------------------------
+# 6. Run Both Scenarios
+# ------------------------------
+results_dam       <- run_lcm(redd_mort_dam)
+results_no_action <- run_lcm(redd_mort_no_action)
+
+# ------------------------------
+# 7. Percent Decline Calculation
+# ------------------------------
+mean_dam       <- apply(results_dam,2,mean)
+mean_no_action <- apply(results_no_action,2,mean)
+
+percent_decline_by_year <- 
+  (mean_no_action - mean_dam) / mean_no_action * 100
+
+mean_percent_decline <- mean(percent_decline_by_year)
+
+cat("Mean Percent Decline in Smolts (Dam vs No Action):",
+    round(mean_percent_decline,2), "%\n")
+
+# ------------------------------
+# 7b. Summary Comparison Table
+# ------------------------------
+
+# Mean smolts across all years (and MC runs)
+overall_mean_dam       <- mean(results_dam)
+overall_mean_no_action <- mean(results_no_action)
+
+# Absolute and percent difference
+difference_smolt <- overall_mean_no_action - overall_mean_dam
+percent_diff     <- difference_smolt / overall_mean_no_action * 100
+
+summary_table <- data.frame(
+  Scenario = c("No Action", "Dam Operations"),
+  Mean_Smolts = c(overall_mean_no_action,
+                  overall_mean_dam)
+)
+
+comparison_row <- data.frame(
+  Scenario = "Difference (No Action - Dam)",
+  Mean_Smolts = difference_smolt
+)
+
+percent_row <- data.frame(
+  Scenario = "Percent Difference (%)",
+  Mean_Smolts = percent_diff
+)
+
+summary_output <- rbind(summary_table,
+                        comparison_row,
+                        percent_row)
+
+summary_output$Mean_Smolts <- round(summary_output$Mean_Smolts, 2)
+print(summary_output)
+
+# ------------------------------
+# 8. Prepare Plot Data
+# ------------------------------
+long_dam <- as.data.frame(as.table(results_dam))
+colnames(long_dam) <- c("Sim","Year","Smolts")
+long_dam$Scenario <- "Dam Operations"
+
+long_no_action <- as.data.frame(as.table(results_no_action))
+colnames(long_no_action) <- c("Sim","Year","Smolts")
+long_no_action$Scenario <- "No Action"
+
+long_all <- rbind(long_dam, long_no_action)
+long_all$Year <- as.numeric(gsub("V","", long_all$Year))
+
+summary_df <- data.frame(
+  Year = rep(1:n_years,2),
+  Smolts = c(mean_dam, mean_no_action),
+  Scenario = rep(c("Dam Operations","No Action"),
+                 each=n_years)
+)
+
+# ------------------------------
+# 9. Spaghetti Plot
+# ------------------------------
+
+ggplot() +
+  
+  # Mean lines (bold)
+  geom_line(data=summary_df,
+            aes(x=Year,y=Smolts,color=Scenario),
+            linewidth=1.4) +
+  
+  scale_color_manual(values=c(
+    "Dam Operations"="red",
+    "No Action"="blue"
+  )) +
+  
+  labs(title="Chinook Smolts Reaching Grays Harbor",
+       subtitle=paste("Decline with Dam:",
+                      round(mean_percent_decline,2),"%"),
+       x="Year",
+       y="Smolts to Grays Harbor",
+       color="Scenario") +
+  
+  theme_minimal(base_size=14)
