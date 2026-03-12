@@ -31,12 +31,15 @@ set.seed(123)
 # ------------------------------
 # 2. Life-History Parameters
 # ------------------------------
-adults_per_redd     <- 2.5 #????
+adults_per_redd     <- 2.5 #Washington State Salmon Recovery Technical Memoranda
 eggs_per_redd     <- 5400 #NOAA LCM
 
-egg_to_fry        <- 0.40   # NEED TO JUSTIFY
-fry_to_smolt_fw   <- 0.15   # NEED TO JUSTIFY
-estuary_surv      <- 0.70   # NEED TO JUSTIFY
+#
+egg_to_fry        <- 0.30   # Egg-to-fry survival for Chinook salmon typically ranges from 25–70% depending on incubation conditions,
+                            #with life-cycle models commonly assuming values around 0.30–0.40. This model uses 0.40 as a
+                            #representative mid-range estimate consistent with NOAA life-cycle modeling assumptions.
+fry_to_smolt_fw   <- 0.15   # Can pull older info from: https://www.waterboards.ca.gov/waterrights/water_issues/programs/bay_delta/deltaflow/docs/exhibits/nmfs/spprt_docs/nmfs_exh4_healey_1991.pdf
+outmigrant_surv      <- 0.70   # 
 
 egg_capacity      <- 8e6
 
@@ -84,14 +87,14 @@ draw_flood <- function(year){
 
 #Assume total Chehalis pop redds is 29,358 / 2.5 fish per redd = 11,743 redds
 #Upper Chehalis redd loss as proportion of entire basin: 
-            #Catastrophic flood: 17 redds lost / 11,743 total redds = 0.00144
+            #Catastrophic flood: 17 redds lost / 11,743 total redds = 0.00145
             #Major flood: 6 redds lost / 11,743 = 0.0005
 #Apply these proportions for the redd mort with FRE ops
 
 redd_mort_dam <- c(
   typical = 0.00,
   major = 0.0005,
-  catastrophic = 0.00144
+  catastrophic = 0.00145
 )
 
 redd_mort_no_action <- c(
@@ -121,7 +124,7 @@ run_lcm <- function(redd_mort_vector){
       eggs <- BH(redds_post, eggs_per_redd, egg_capacity)
       fry  <- eggs * egg_to_fry
       smolts_fw <- fry * fry_to_smolt_fw
-      smolts_GH <- smolts_fw * estuary_surv
+      smolts_GH <- smolts_fw * outmigrant_surv
       
       smolts_out[mc,yr] <- smolts_GH
       adults <- pop_init
@@ -183,7 +186,7 @@ summary_output <- rbind(summary_table,
                         comparison_row,
                         percent_row)
 
-summary_output$Mean_Smolts <- round(summary_output$Mean_Smolts, 2)
+summary_output$Mean_Smolts <- round(summary_output$Mean_Smolts, 3)
 print(summary_output)
 
 # ------------------------------
@@ -225,7 +228,8 @@ ggplot() +
   
   labs(title="Fall Chinook Smolts Reaching Grays Harbor",
        subtitle=paste("Decline with FRE:",
-                      round(comparison_row$Mean_Smolts,2),"smolts"),
+                      round(comparison_row$Mean_Smolts,2),"smolts;",
+                      round(summary_output$Mean_Smolts[4],4), "%"),
        x="Year",
        y="Smolts to Grays Harbor",
        color="Scenario") +
